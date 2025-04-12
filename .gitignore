@@ -10,7 +10,6 @@
 *.opendb
 *.cs
 *.cache
-*.cpp
 *.tlog
 *.lastbuildstate
 *.dll
