@@ -24,7 +24,7 @@ ofstream outgoing_file("outgoing.txt");
 
 
 //Possible filter actions
-const ndisapi::fastio_packet_filter::packet_action actions[3] = { ndisapi::fastio_packet_filter::packet_action::pass, ndisapi::fastio_packet_filter::packet_action::drop, ndisapi::fastio_packet_filter::packet_action::revert };
+const ndisapi::queued_packet_filter::packet_action actions[3] = { ndisapi::queued_packet_filter::packet_action::pass, ndisapi::queued_packet_filter::packet_action::drop, ndisapi::queued_packet_filter::packet_action::revert };
 
 //Adnan's helper function to write packet information into incoming file
 void WriteIntoFile(const firewall_core::PacketInformation& p, ofstream& file_stream, u_short ruleID);
@@ -38,7 +38,7 @@ void write_buffer_hex(const uint8_t* buffer, size_t length, ofstream& file_strea
 
 
 //Function to filter packets
-ndisapi::fastio_packet_filter::packet_action filter(INTERMEDIATE_BUFFER buffer, ether_header_ptr eth_header);
+ndisapi::queued_packet_filter::packet_action filter(INTERMEDIATE_BUFFER buffer, ether_header_ptr eth_header);
 
 
 /// <summary>
@@ -193,7 +193,7 @@ void outgoing_packet_processor()
     }
 }
 
-ndisapi::fastio_packet_filter::packet_action prcIncoming(HANDLE, INTERMEDIATE_BUFFER& buffer) {
+ndisapi::queued_packet_filter::packet_action prcIncoming(HANDLE, INTERMEDIATE_BUFFER& buffer) {
     {
         lock_guard<mutex> lock(in_mutex);
         incoming_queue.push({ buffer, 0 });
@@ -202,7 +202,7 @@ ndisapi::fastio_packet_filter::packet_action prcIncoming(HANDLE, INTERMEDIATE_BU
     return actions[0];
 }
 
-ndisapi::fastio_packet_filter::packet_action prcOutgoing(HANDLE, INTERMEDIATE_BUFFER& buffer) {
+ndisapi::queued_packet_filter::packet_action prcOutgoing(HANDLE, INTERMEDIATE_BUFFER& buffer) {
     {
         lock_guard<mutex> lock(out_mutex);
         outgoing_queue.push(buffer);
@@ -224,10 +224,10 @@ int main()
 
     //Firewall Main Component
 
-    auto ndis_api = make_unique<ndisapi::fastio_packet_filter>(
+    auto ndis_api = make_unique<ndisapi::queued_packet_filter>(
         [](HANDLE, INTERMEDIATE_BUFFER& buffer) {
             
-            pair<ndisapi::fastio_packet_filter::packet_action, u_short> ans = ruleExe.matchRules(extractPacket(buffer));
+            pair<ndisapi::queued_packet_filter::packet_action, u_short> ans = ruleExe.matchRules(extractPacket(buffer));
             
             {
                 lock_guard<mutex> lock(in_mutex);
@@ -244,7 +244,7 @@ int main()
             }
             out_cv.notify_one();
             return ruleExe.matchRules(extractPacket(buffer)).first;
-        }, true);
+        });
 
     try
     {
@@ -387,7 +387,7 @@ void write_buffer_hex(const uint8_t* buffer, size_t length, ofstream& file_strea
 }
 
 
-ndisapi::fastio_packet_filter::packet_action filter(INTERMEDIATE_BUFFER buffer, ether_header_ptr eth_header)
+ndisapi::queued_packet_filter::packet_action filter(INTERMEDIATE_BUFFER buffer, ether_header_ptr eth_header)
 {
 
     if (eth_header->h_proto == ntohs(ETH_P_IP))

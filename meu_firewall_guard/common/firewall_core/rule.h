@@ -20,7 +20,7 @@ namespace firewall_core {
         u_short srcPort;
         u_short destPort;
         u_char proto;
-        ndisapi::fastio_packet_filter::packet_action action;
+        ndisapi::queued_packet_filter::packet_action action;
 
         //default contructor
         //set every feild to ANY
@@ -28,11 +28,11 @@ namespace firewall_core {
         Rule() {
             srcIP = ANY_IP, destIP = ANY_IP;
             srcPort = ANY_PORT, destPort = ANY_PORT, proto = ANY_PROTO;
-            action = ndisapi::fastio_packet_filter::packet_action::pass;
+            action = ndisapi::queued_packet_filter::packet_action::pass;
         }
 
         Rule(u_char proto, std::string srcIP, std::string destIP, short srcPort, short destPort,
-            ndisapi::fastio_packet_filter::packet_action action = ndisapi::fastio_packet_filter::packet_action::pass) {
+            ndisapi::queued_packet_filter::packet_action action = ndisapi::queued_packet_filter::packet_action::pass) {
             this->srcIP = srcIP, this->destIP = destIP;
             this->srcPort = srcPort, this->destPort = destPort, this->proto = proto;
             this->action = action;

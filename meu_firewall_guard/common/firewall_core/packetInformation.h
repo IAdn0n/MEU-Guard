@@ -25,7 +25,7 @@ namespace firewall_core {
         u_short srcPort;
         u_short destPort;
         u_char proto;
-        ndisapi::fastio_packet_filter::packet_action action;                    //0->pass   1->drop    2->revert
+        ndisapi::queued_packet_filter::packet_action action;                    //0->pass   1->drop    2->revert
 
         PacketInformation() {
             packetID = "-1";
@@ -36,7 +36,7 @@ namespace firewall_core {
             srcMAC = ANY_MAC;
             destMAC = ANY_MAC;
             proto = ANY_PROTO;
-            action = ndisapi::fastio_packet_filter::packet_action::pass;
+            action = ndisapi::queued_packet_filter::packet_action::pass;
         }
     };
 }

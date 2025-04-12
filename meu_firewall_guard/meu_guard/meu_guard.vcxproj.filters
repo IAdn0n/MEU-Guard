@@ -30,6 +30,9 @@
     <ClInclude Include="..\common\firewall_core\ruleExecuter.h">
       <Filter>common\firewall_core</Filter>
     </ClInclude>
+    <ClInclude Include="..\common\ndisapi\queued_packet_filter.h">
+      <Filter>common\ndisapi</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="README.md" />

@@ -54,7 +54,6 @@
 #include "../common/net/ip_subnet.h"
 #include "../common/iphelper/network_adapter_info.h"
 #include "../common/ndisapi/network_adapter.h"
-#include "../common/ndisapi/fastio_packet_filter.h"
 #include "../common/ndisapi/queued_packet_filter.h"
 #include "../common/firewall_core/packetInformation.h"
 #include "../common/firewall_core/rule.h"

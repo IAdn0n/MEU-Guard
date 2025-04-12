@@ -38,7 +38,7 @@ namespace firewall_core {
         /// <param name="packet"></param>
         /// <returns>action to be taken on a packet</returns>
         // ********************************************************************************
-        std::pair<ndisapi::fastio_packet_filter::packet_action, u_short> matchRules(const PacketInformation &packet);
+        std::pair<ndisapi::queued_packet_filter::packet_action, u_short> matchRules(const PacketInformation &packet);
 
         // ********************************************************************************
         /// <summary>
@@ -101,8 +101,8 @@ namespace firewall_core {
         buildDefaultRule();
 
         //temporary RULEs
-        std::vector<Rule> rules = { Rule(ANY_PROTO, ANY_IP, ANY_IP,ANY_PORT, 80, ndisapi::fastio_packet_filter::packet_action::drop),
-                                    Rule(IPPROTO_UDP, ANY_IP, ANY_IP,ANY_PORT, ANY_PORT, ndisapi::fastio_packet_filter::packet_action::drop)};
+        std::vector<Rule> rules = { Rule(ANY_PROTO, ANY_IP, ANY_IP,ANY_PORT, 80, ndisapi::queued_packet_filter::packet_action::drop),
+                                    Rule(IPPROTO_UDP, ANY_IP, ANY_IP,ANY_PORT, ANY_PORT, ndisapi::queued_packet_filter::packet_action::drop)};
         try {
             for (auto& i : rules) {
                 buildRule(i);
@@ -234,7 +234,7 @@ namespace firewall_core {
         return true;
     }
 
-    inline std::pair<ndisapi::fastio_packet_filter::packet_action, u_short> RuleExecuter::matchRules(const PacketInformation &packet) {
+    inline std::pair<ndisapi::queued_packet_filter::packet_action, u_short> RuleExecuter::matchRules(const PacketInformation &packet) {
         TreeNode* curr = treeRoot;
 
         try {
@@ -331,7 +331,7 @@ namespace firewall_core {
         }
         catch (const std::exception &e) {
             std::cerr << "Exception occured: " << e.what() << std::endl;
-            return { ndisapi::fastio_packet_filter::packet_action::drop, 0xffff };
+            return { ndisapi::queued_packet_filter::packet_action::drop, 0xffff };
         }
 
         return { curr->rule.action, curr->ruleID };
@@ -345,9 +345,9 @@ namespace firewall_core {
             std::cout << "lvl=0->";
             std::cout << ntohs(i->rule.proto) << '/' << i->rule.srcIP << '/' << i->rule.destIP << '/';
             std::cout << i->rule.srcPort << '/' << i->rule.destPort << '/';
-            if (i->rule.action == ndisapi::fastio_packet_filter::packet_action::pass)
+            if (i->rule.action == ndisapi::queued_packet_filter::packet_action::pass)
                 std::cout << "pass" << std::endl;
-            else if (i->rule.action == ndisapi::fastio_packet_filter::packet_action::drop)
+            else if (i->rule.action == ndisapi::queued_packet_filter::packet_action::drop)
                 std::cout << "drop" << std::endl;
             else std::cout << "revert" << std::endl;
 
@@ -363,9 +363,9 @@ namespace firewall_core {
             std::cout << "->";
             std::cout << ntohs(i->rule.proto) << '/' << i->rule.srcIP << '/' << i->rule.destIP << '/';
             std::cout << i->rule.srcPort << '/' << i->rule.destPort << '/';
-            if (i->rule.action == ndisapi::fastio_packet_filter::packet_action::pass)
+            if (i->rule.action == ndisapi::queued_packet_filter::packet_action::pass)
                 std::cout << "pass" << std::endl;
-            else if (i->rule.action == ndisapi::fastio_packet_filter::packet_action::drop)
+            else if (i->rule.action == ndisapi::queued_packet_filter::packet_action::drop)
                 std::cout << "drop" << std::endl;
             else std::cout << "revert" << std::endl;
 
