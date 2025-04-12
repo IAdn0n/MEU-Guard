@@ -1,0 +1,80 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "C:\\Users\\bassam_03\\Downloads\\Graduation Project\\ndisapi-master\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{BB2DF044-0B37-4335-B705-3CA6BA95514F}|examples\\cpp\\capture\\capture.vcxproj|C:\\Users\\bassam_03\\Downloads\\Graduation Project\\ndisapi-master\\examples\\cpp\\capture\\capture.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{BB2DF044-0B37-4335-B705-3CA6BA95514F}|examples\\cpp\\capture\\capture.vcxproj|solutionrelative:examples\\cpp\\capture\\capture.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{BB2DF044-0B37-4335-B705-3CA6BA95514F}|examples\\cpp\\capture\\capture.vcxproj|C:\\USERS\\BASSAM_03\\DOWNLOADS\\GRADUATION PROJECT\\NDISAPI-MASTER\\INCLUDE\\COMMON.H||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{BB2DF044-0B37-4335-B705-3CA6BA95514F}|examples\\cpp\\capture\\capture.vcxproj|solutionrelative:INCLUDE\\COMMON.H||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 2,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "Common.h",
+              "DocumentMoniker": "C:\\Users\\bassam_03\\Downloads\\Graduation Project\\ndisapi-master\\include\\Common.h",
+              "RelativeDocumentMoniker": "include\\Common.h",
+              "ToolTip": "C:\\Users\\bassam_03\\Downloads\\Graduation Project\\ndisapi-master\\include\\Common.h",
+              "RelativeToolTip": "include\\Common.h",
+              "ViewState": "AgIAALQAAAAAAAAAAADwv8UAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
+              "WhenOpened": "2025-03-20T07:46:42.976Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{3ae79031-e1bc-11d0-8f78-00a0c9110057}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "capture.cpp",
+              "DocumentMoniker": "C:\\Users\\bassam_03\\Downloads\\Graduation Project\\ndisapi-master\\examples\\cpp\\capture\\capture.cpp",
+              "RelativeDocumentMoniker": "examples\\cpp\\capture\\capture.cpp",
+              "ToolTip": "C:\\Users\\bassam_03\\Downloads\\Graduation Project\\ndisapi-master\\examples\\cpp\\capture\\capture.cpp*",
+              "RelativeToolTip": "examples\\cpp\\capture\\capture.cpp*",
+              "ViewState": "AgIAADoAAAAAAAAAAAAAAE0AAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2024-11-14T16:54:35.478Z",
+              "EditorCaption": ""
+            }
+          ]
+        },
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": -1,
+          "Children": [
+            {
+              "$type": "Bookmark",
+              "Name": "ST:1:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{d78612c7-9962-4b83-95d9-268046dad23a}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{34e76e81-ee4a-11d0-ae2e-00a0c90fffc3}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{68487888-204a-11d3-87eb-00c04f7971a5}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
