@@ -33,6 +33,27 @@
     <ClInclude Include="..\common\ndisapi\queued_packet_filter.h">
       <Filter>common\ndisapi</Filter>
     </ClInclude>
+    <ClInclude Include="..\common\firewall_core\linearRuleExecuter.h">
+      <Filter>common\firewall_core</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\database\databaseConnection.h">
+      <Filter>common\database</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\database\ruleDAO.h">
+      <Filter>common\database</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\database\logDAO.h">
+      <Filter>common\database</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\logging\logger.h">
+      <Filter>common\logging</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\NAT\NATTable.h">
+      <Filter>common\NAT</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\NAT\applyNAT.h">
+      <Filter>common\NAT</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="README.md" />
@@ -54,6 +75,15 @@
     </Filter>
     <Filter Include="main">
       <UniqueIdentifier>{ad35bedd-d2da-4ecc-a74d-8336440b7d0e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="common\database">
+      <UniqueIdentifier>{b48d3b80-39b6-4ba8-af33-26028acdaf85}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="common\logging">
+      <UniqueIdentifier>{cbeb38f2-e91f-4599-ad65-3e5bd5d4d333}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="common\NAT">
+      <UniqueIdentifier>{84edb265-3f50-46ba-b393-0131d5458bac}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

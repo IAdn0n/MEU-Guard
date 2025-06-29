@@ -1,13 +1,5 @@
 #pragma once
 
-//TEMPORARY REMOVE LATER
-#define ANY_STRING "*"
-#define ANY_SHORT 0
-#define ANY_IP ANY_STRING
-#define ANY_PORT ANY_SHORT
-#define ANY_PROTO 0
-
-/// 
 
 namespace firewall_core {
     // a rule node in tree structure
@@ -22,7 +14,7 @@ namespace firewall_core {
             children = std::vector<TreeNode*>();
         }
 
-        size_t getChildrenSize() const { return children.size(); }
+         size_t getChildrenSize() const { return children.size(); }
     };
 
     class RuleExecuter {
@@ -101,8 +93,23 @@ namespace firewall_core {
         buildDefaultRule();
 
         //temporary RULEs
-        std::vector<Rule> rules = { Rule(ANY_PROTO, ANY_IP, ANY_IP,ANY_PORT, 80, ndisapi::queued_packet_filter::packet_action::drop),
-                                    Rule(IPPROTO_UDP, ANY_IP, ANY_IP,ANY_PORT, ANY_PORT, ndisapi::queued_packet_filter::packet_action::drop)};
+        std::vector<Rule> rules = { Rule(1,ANY_PROTO, ANY_IP, ANY_IP,ANY_PORT, 80, ndisapi::queued_packet_filter::packet_action::drop),
+                                    Rule(2,ANY_PROTO, ANY_IP, ANY_IP,ANY_PORT, ANY_PORT, ndisapi::queued_packet_filter::packet_action::drop),
+                                    Rule(3,ANY_PROTO, "8.8.8.8", ANY_IP,ANY_PORT, ANY_PORT, ndisapi::queued_packet_filter::packet_action::pass),
+                                    Rule(4,IPPROTO_UDP, ANY_IP, ANY_IP,ANY_PORT, 8080, ndisapi::queued_packet_filter::packet_action::drop),
+                                    Rule(5,IPPROTO_TCP, ANY_IP, ANY_IP,ANY_PORT, 8080, ndisapi::queued_packet_filter::packet_action::pass),
+                                    Rule(6,IPPROTO_TCP, "216.239.32.21", ANY_IP,ANY_PORT, 8080, ndisapi::queued_packet_filter::packet_action::pass),
+                                    /*black listed IPs*/
+                                    Rule(7,ANY_PROTO, "12.36.233.53", ANY_IP,ANY_PORT, ANY_PORT, ndisapi::queued_packet_filter::packet_action::drop),
+                                    Rule(8,ANY_PROTO, "24.19.232.156", ANY_IP,ANY_PORT, ANY_PORT, ndisapi::queued_packet_filter::packet_action::drop),
+                                    Rule(9,ANY_PROTO, "12.235.186.202", ANY_IP,ANY_PORT, ANY_PORT, ndisapi::queued_packet_filter::packet_action::drop),
+                                    Rule(10,ANY_PROTO, "16.98.105.52", ANY_IP,ANY_PORT, ANY_PORT, ndisapi::queued_packet_filter::packet_action::drop),
+                                    Rule(11,ANY_PROTO, "23.116.86.82", ANY_IP,ANY_PORT, ANY_PORT, ndisapi::queued_packet_filter::packet_action::drop),
+                                    Rule(12,ANY_PROTO, "24.8.36.247", ANY_IP,ANY_PORT, ANY_PORT, ndisapi::queued_packet_filter::packet_action::drop),
+                                    Rule(13,ANY_PROTO, "24.10.151.118", ANY_IP,ANY_PORT, ANY_PORT, ndisapi::queued_packet_filter::packet_action::drop),
+                                    Rule(14,ANY_PROTO, "35.151.139.129", ANY_IP,ANY_PORT, ANY_PORT, ndisapi::queued_packet_filter::packet_action::drop),
+                                    Rule(15,ANY_PROTO, "50.27.173.66", ANY_IP,ANY_PORT, ANY_PORT, ndisapi::queued_packet_filter::packet_action::drop) };
+     
         try {
             for (auto& i : rules) {
                 buildRule(i);
@@ -145,7 +152,7 @@ namespace firewall_core {
 
         if (protoIndex.find(rule.proto) == protoIndex.end()) {
             //set the index of specifc protocol
-            protoIndex[rule.proto] = it->getChildrenSize();
+            protoIndex[rule.proto] = (u_short)it->getChildrenSize();
             it->children.push_back(new TreeNode());
             it->children[it->getChildrenSize() - 1]->rule.proto = rule.proto;
         }

@@ -9,11 +9,11 @@
 *.db-wal
 *.opendb
 *.cs
+*.lib
+*.dll
 *.cache
 *.tlog
 *.lastbuildstate
-*.dll
-*.lib
 *.exp
 *.pdb
 *.exe

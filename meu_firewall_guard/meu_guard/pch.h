@@ -40,6 +40,7 @@
 #include <algorithm>
 #include <fstream>
 #include <charconv>
+#include <chrono>
 #include <gsl/gsl>
 
 #include "../../include/common.h"
@@ -54,9 +55,17 @@
 #include "../common/net/ip_subnet.h"
 #include "../common/iphelper/network_adapter_info.h"
 #include "../common/ndisapi/network_adapter.h"
+
 #include "../common/ndisapi/queued_packet_filter.h"
+#include "../common/database/databaseConnection.h"
 #include "../common/firewall_core/packetInformation.h"
 #include "../common/firewall_core/rule.h"
+#include "../common/database/ruleDAO.h"
+#include "../common/database/logDAO.h"
+#include "../common/logging/logger.h"
 #include "../common/firewall_core/ruleExecuter.h"
+#include "../common/firewall_core/linearRuleExecuter.h"
+#include "../common/NAT/applyNAT.h"
+#include "../common/NAT/NATTable.h"
 
 #endif //PCH_H

@@ -1,407 +1,630 @@
 #include "pch.h"
-#include <iostream>
-#include <string>
-#include <fstream>     // For file stream
-#include <ws2tcpip.h>  // For InetNtopA
-#include <iomanip>     // For formatting MAC address output
-#include <queue>
-#include <mutex>
-#include <condition_variable>
-using namespace std;
+
+const uint32_t FIREWALL_MASK = 0xFFFFFF00;
+const uint32_t NAT_NETWORK = 0xC0A86400;
 
 
-queue<firewall_core::PacketInformation> incoming;
-queue<firewall_core::PacketInformation> results;
+//hard coded for now
+//TODO: dynamically allocate addresses
+const IP_ADDRESS deviceIP = "192.168.100.19";
+const IP_ADDRESS firewallIP = "192.168.100.200";
+const MAC_ADDRESS firewallMac = "80:30:49:D6:D1:5B";
+const MAC_ADDRESS routerMac = "28:11:EC:AC:49:42";
 
-queue<pair<INTERMEDIATE_BUFFER, u_short>> incoming_queue;
-queue<INTERMEDIATE_BUFFER> outgoing_queue;
-mutex in_mutex, out_mutex, cout_mutex;
-condition_variable in_cv, out_cv;
-bool stop_threads = false;
-
-ofstream incoming_file("incoming.txt");
-ofstream outgoing_file("outgoing.txt");
-
-
-//Possible filter actions
-const ndisapi::queued_packet_filter::packet_action actions[3] = { ndisapi::queued_packet_filter::packet_action::pass, ndisapi::queued_packet_filter::packet_action::drop, ndisapi::queued_packet_filter::packet_action::revert };
-
-//Adnan's helper function to write packet information into incoming file
-void WriteIntoFile(const firewall_core::PacketInformation& p, ofstream& file_stream, u_short ruleID);
-
-// Helper function to write MAC addresses to a file
-void write_info_to_file(const string direction, const uint8_t* srcmac, const uint8_t* destmac, const in_addr& srcip, const in_addr& destip, ofstream& file_stream);
-
-
-//Function to write packet bytes
-void write_buffer_hex(const uint8_t* buffer, size_t length, ofstream& file_stream);
-
-
-//Function to filter packets
-ndisapi::queued_packet_filter::packet_action filter(INTERMEDIATE_BUFFER buffer, ether_header_ptr eth_header);
-
-
-/// <summary>
-/// 
-/// 
-/// 
-///                   ADNAN's TEMPORARY CODe
-/// 
-/// 
-/// </summary>
-/// <param name="buffer"></param>
-/// <returns></returns>
-firewall_core::PacketInformation extractPacket(INTERMEDIATE_BUFFER& buffer) {
-    //returned packet
-    firewall_core::PacketInformation packet;
-
-    auto* ethernet_header = reinterpret_cast<ether_header_ptr>(buffer.m_IBuffer);
-
-    //MAC src/des
-    packet.srcMAC = to_string(ethernet_header->h_source[0]) + ":"
-        + to_string(ethernet_header->h_source[1]) + ":"
-        + to_string(ethernet_header->h_source[2]) + ":"
-        + to_string(ethernet_header->h_source[3]) + ":"
-        + to_string(ethernet_header->h_source[4]) + ":"
-        + to_string(ethernet_header->h_source[5]);
-
-    packet.destMAC = to_string(ethernet_header->h_dest[0]) + ":"
-        + to_string(ethernet_header->h_dest[1]) + ":"
-        + to_string(ethernet_header->h_dest[2]) + ":"
-        + to_string(ethernet_header->h_dest[3]) + ":"
-        + to_string(ethernet_header->h_dest[4]) + ":"
-        + to_string(ethernet_header->h_dest[5]);
-
-
-    if (ethernet_header->h_proto == ntohs(ETH_P_IP))
-    {
-        auto* ip_header = reinterpret_cast<iphdr_ptr>(buffer.m_IBuffer + sizeof(ether_header));
-
-
-        //protocol
-        packet.proto = ip_header->ip_p;
-
-
-        //src/dest ports
-        if (ip_header->ip_p == IPPROTO_TCP)
-        {
-            auto* tcp_header = reinterpret_cast<tcphdr_ptr>(buffer.m_IBuffer + sizeof(ether_header) + ip_header->ip_hl * 4);
-            packet.srcPort = ntohs(tcp_header->th_sport);
-            packet.destPort = ntohs(tcp_header->th_dport);
-        }
-        else if (ip_header->ip_p == IPPROTO_UDP)
-        {
-            auto* udp_header = reinterpret_cast<udphdr_ptr>(buffer.m_IBuffer + sizeof(ether_header) + ip_header->ip_hl * 4);
-            packet.srcPort = ntohs(udp_header->th_sport);
-            packet.destPort = ntohs(udp_header->th_dport);
-        }
-
-        //extract src/dst IPs
-        char srcip_str[INET_ADDRSTRLEN]; // Buffer to hold the IP string
-        char destip_str[INET_ADDRSTRLEN];
-        InetNtopA(AF_INET, &ip_header->ip_src, srcip_str, INET_ADDRSTRLEN); // Converts the IP to a string (ANSI version)
-        InetNtopA(AF_INET, &ip_header->ip_dst, destip_str, INET_ADDRSTRLEN);
-
-        packet.srcIP = srcip_str;
-        packet.destIP = destip_str;
-    }
-
-    return packet;
-}
-
-
-/// <summary>
-/// 
-/// 
-/// 
-///                             ADNAN's TEMPORARY CODE     
-/// 
-/// 
-/// 
-/// </summary>
-void incoming_packet_processor()
-{
-    while (!stop_threads)
-    {
-        unique_lock<mutex> lock(in_mutex);
-        in_cv.wait(lock, [] { return !incoming_queue.empty() || stop_threads; });
-
-        while (!incoming_queue.empty())
-        {
-            INTERMEDIATE_BUFFER buffer = incoming_queue.front().first;
-            u_short ruleID = incoming_queue.front().second;
-            incoming_queue.pop();
-            lock.unlock();  // Release lock while processing
-            
-            
-            ///////////////////////////////////////////////DEBUGGING/////////////////////////////////
-            cout_mutex.lock();
-            for (int i = 0; i < buffer.m_Length; i++) {
-                cout << hex << setw(2) << setfill('0')
-                    << static_cast<int>(buffer.m_IBuffer[i]) << " ";
-                
-            }
-            cout << "\nincoming DONE\n";
-            cout << "\n\n\n";
-            cout_mutex.unlock();
-
-            firewall_core::PacketInformation p = extractPacket(buffer);
-            
-            WriteIntoFile(p, incoming_file, ruleID);
-            ////////////////////////////////////////////////////////////////////////////////////////
-
-
-            write_buffer_hex(buffer.m_IBuffer, buffer.m_Length, incoming_file);
-
-            lock.lock();  // Re-acquire lock for the next packet
-        }
-    }
-}
-
-void outgoing_packet_processor()
-{
-    while (!stop_threads)
-    {
-        unique_lock<mutex> lock(out_mutex);
-        out_cv.wait(lock, [] { return !outgoing_queue.empty() || stop_threads; });
-
-        while (!outgoing_queue.empty())
-        {
-            INTERMEDIATE_BUFFER buffer = outgoing_queue.front();
-            outgoing_queue.pop();
-            lock.unlock();  // Release lock while processing
-
-            ///////////////////////////////////////////////DEBUGGING/////////////////////////////////
-            cout_mutex.lock();
-            for (int i = 0; i < buffer.m_Length; i++) {
-                cout << hex << setw(2) << setfill('0')
-                    << static_cast<int>(buffer.m_IBuffer[i]) << " ";
-
-            }
-            cout << "\noutgoing DONE\n";
-            cout << "\n\n\n";
-            cout_mutex.unlock();
-
-            firewall_core::PacketInformation p = extractPacket(buffer);
-
-            WriteIntoFile(p, outgoing_file, 0);
-
-            write_buffer_hex(buffer.m_IBuffer, buffer.m_Length, outgoing_file);
-
-            lock.lock();  // Re-acquire lock for the next packet
-        }
-    }
-}
-
-ndisapi::queued_packet_filter::packet_action prcIncoming(HANDLE, INTERMEDIATE_BUFFER& buffer) {
-    {
-        lock_guard<mutex> lock(in_mutex);
-        incoming_queue.push({ buffer, 0 });
-    }
-    in_cv.notify_one();
-    return actions[0];
-}
-
-ndisapi::queued_packet_filter::packet_action prcOutgoing(HANDLE, INTERMEDIATE_BUFFER& buffer) {
-    {
-        lock_guard<mutex> lock(out_mutex);
-        outgoing_queue.push(buffer);
-    }
-    out_cv.notify_one();
-    return actions[0];
-}
 
 //Firewall Main Component
-//auto ndis_api = make_unique<ndisapi::fastio_packet_filter>(prcIncoming,prcOutgoing, true);
+NAT::NATTable NatTable;
+firewall_core::LinearRuleExecuter ruleExe;
+logging::Logger logger;
 
-firewall_core::RuleExecuter ruleExe;
+
+
+//checks if both IPs are from the same network
+bool isSameNetwork(const IP_ADDRESS& srcIP, const IP_ADDRESS& dstIP, uint32_t subnetMask) {
+    in_addr addr1, addr2;
+
+    if (inet_pton(AF_INET, srcIP.c_str(), &addr1) != 1 || inet_pton(AF_INET, dstIP.c_str(), &addr2) != 1)
+        return false; // Invalid IP format
+
+    uint32_t ip1_net = ntohl(addr1.s_addr) & subnetMask;
+    uint32_t ip2_net = ntohl(addr2.s_addr) & subnetMask;
+
+    return ip1_net == ip2_net;
+}
+
+//broadcast checker function
+bool isBroadcast(const IP_ADDRESS& ip) {
+    in_addr addr;
+    if (inet_pton(AF_INET, ip.c_str(), &addr) != 1)
+        return false; //invalid IP
+
+    uint32_t ip_int = ntohl(addr.s_addr);
+
+    //255.255.255.255 (limited broadcast)
+    if (ip_int == 0xFFFFFFFF)
+        return true;
+
+    uint32_t mask = 0xFFFFFF00; // 255.255.255.0
+    uint32_t subnet = ip_int & mask;
+    uint32_t broadcast = subnet | ~mask;
+
+    return ip_int == broadcast;
+}
+
+
+//multicast checker function
+bool isMulticast(const IP_ADDRESS& ip) {
+    in_addr addr;
+    inet_pton(AF_INET, ip.c_str(), &addr);
+    uint32_t ip_int = ntohl(addr.s_addr);
+    return ip_int >= 0xE0000000 && ip_int <= 0xEFFFFFFF; //224.0.0.0 to 239.255.255.255
+}
+
+
+//function that checks for loopbacks(127.0.0.0/8)
+bool isLoopback(const IP_ADDRESS& ip) {
+    in_addr addr;
+    inet_pton(AF_INET, ip.c_str(), &addr);
+    uint32_t ip_int = ntohl(addr.s_addr);
+    return (ip_int & 0xFF000000) == 0x7F000000; // 127.0.0.0/8
+}
+
+
+
+void processIncoming();
+void processOutgoing();
+
+void passIncoming(INTERMEDIATE_BUFFER& buffer, HANDLE& handle, firewall_core::PacketInformation &p, u_short ruleID);
+void passOutgoing(INTERMEDIATE_BUFFER& buffer, HANDLE& handle, firewall_core::PacketInformation &p, u_short ruleID);
+
+
+struct queue_data {
+    INTERMEDIATE_BUFFER buffer;
+    HANDLE handle;
+    firewall_core::PacketInformation packet;
+    u_short ruleID;
+};
+
+std::queue<queue_data> incomingQueue;
+std::queue<queue_data> outgoingQueue;
+
+std::mutex incomingMutex;
+std::mutex outgoingMutex;
+
+std::thread sendIncomingThread;
+std::thread sendOutgoingThread;
+
+std::condition_variable incomingCV;
+std::condition_variable outgoingCV;
+
+//to keep sendIncoming/sendOutgoing threads alive;
+std::atomic<bool> running = false;
+
+bool sendAdapter(INTERMEDIATE_BUFFER& buffer, HANDLE& handle);
+bool sendMstcp(INTERMEDIATE_BUFFER& buffer, HANDLE& handle);
+
+
+void writeIntoFile(INTERMEDIATE_BUFFER& buffer, HANDLE& handle, std::string filename)
+{
+    using namespace std;
+
+    std::ostringstream oss;
+
+    // Ethernet header
+    const auto* eth_header = reinterpret_cast<ether_header*>(buffer.m_IBuffer);
+
+    // Check if IP
+    if (ntohs(eth_header->h_proto) != ETH_P_IP)
+        return;
+
+    // IP header
+    const auto* ip_header = reinterpret_cast<iphdr*>(buffer.m_IBuffer + sizeof(ether_header));
+    int ip_header_len = ip_header->ip_hl * 4;
+
+    // Convert IPs
+    char src_ip[INET_ADDRSTRLEN];
+    char dst_ip[INET_ADDRSTRLEN];
+
+    inet_ntop(AF_INET, &ip_header->ip_src, src_ip, INET_ADDRSTRLEN);
+    inet_ntop(AF_INET, &ip_header->ip_dst, dst_ip, INET_ADDRSTRLEN);
+
+    // Get ports (TCP or UDP)
+    uint16_t src_port = 0, dst_port = 0;
+    if (ip_header->ip_p == IPPROTO_TCP || ip_header->ip_p == IPPROTO_UDP)
+    {
+        const auto* transport_hdr = reinterpret_cast<tcphdr*>(buffer.m_IBuffer + sizeof(ether_header) + ip_header_len);
+        src_port = ntohs(transport_hdr->th_sport);
+        dst_port = ntohs(transport_hdr->th_dport);
+    }
+
+    // MAC address formatting
+    char src_mac[18], dst_mac[18];
+    sprintf_s(src_mac, "%02X:%02X:%02X:%02X:%02X:%02X",
+        eth_header->h_source[0], eth_header->h_source[1], eth_header->h_source[2],
+        eth_header->h_source[3], eth_header->h_source[4], eth_header->h_source[5]);
+
+    sprintf_s(dst_mac, "%02X:%02X:%02X:%02X:%02X:%02X",
+        eth_header->h_dest[0], eth_header->h_dest[1], eth_header->h_dest[2],
+        eth_header->h_dest[3], eth_header->h_dest[4], eth_header->h_dest[5]);
+
+    // Header info
+    oss << "src: " << src_ip << ":" << src_port << "   MAC(" << src_mac << ")\n";
+    oss << "dst: " << dst_ip << ":" << dst_port << "   MAC(" << dst_mac << ")\n\n";
+    
+    std::string protocol = firewall_core::PacketInformation::getProtoAsString(ip_header->ip_p);
+    oss << "protocol: " << protocol << '\n';
+    
+    // Hex dump of the full packet
+    const size_t len = buffer.m_Length;
+    for (size_t i = 0; i < len; ++i) {
+        oss << std::uppercase << std::hex << std::setw(2) << std::setfill('0')
+            << static_cast<int>(static_cast<uint8_t>(buffer.m_IBuffer[i])) << " ";
+        if ((i + 1) % 16 == 0)
+            oss << "\n";
+    }
+    oss << "\n\n";
+
+    // Write to file
+    std::ofstream outfile(filename, std::ios::app); // open in append mode
+    if (outfile.is_open()) {
+        outfile << oss.str();
+        outfile.close();
+    }
+    else {
+        std::cerr << "Failed to open log file.\n";
+    }
+}
+
+auto ndis_api = std::make_unique<ndisapi::queued_packet_filter>(
+    [](HANDLE handle, INTERMEDIATE_BUFFER& buffer) {
+        /// <summary>
+        writeIntoFile(buffer, handle, "incoming_log.txt");
+        /// </summary>
+        auto* eth_header = reinterpret_cast<ether_header_ptr>(buffer.m_IBuffer);
+
+        //if its not IPv4 packet (pass it)
+        if (eth_header->h_proto != ntohs(ETH_P_IP)) 
+            return PACKET_ACTION::pass;
+
+        firewall_core::PacketInformation p(buffer);
+        //match rules and get answer
+        std::pair<PACKET_ACTION, u_short> ruleExeRslt = ruleExe.matchRules(p);
+
+        //log the packet before processing
+        logger.insertLog(buffer, ruleExeRslt.second);
+        
+        //if passsed send the packet
+        if (ruleExeRslt.first == PACKET_ACTION::pass) {
+            passIncoming(buffer, handle, p, ruleExeRslt.second);
+        }
+
+        return PACKET_ACTION::drop;       
+    },
+    [](HANDLE handle, INTERMEDIATE_BUFFER& buffer) {
+        /// <summary>
+        writeIntoFile(buffer, handle, "outgoing_log.txt");
+        /// </summary>
+        auto* eth_header = reinterpret_cast<ether_header_ptr>(buffer.m_IBuffer);
+
+        //if its not IPv4 packet (pass it)
+        if (eth_header->h_proto != ntohs(ETH_P_IP))
+            return PACKET_ACTION::pass;
+
+        firewall_core::PacketInformation p(buffer);
+        //match rules and get answer
+        std::pair<PACKET_ACTION, u_short> ruleExeRslt = ruleExe.matchRules(p);
+        
+        //log the packet before processing
+        logger.insertLog(buffer, ruleExeRslt.second);
+
+        //if passsed send the packet
+        if (ruleExeRslt.first == PACKET_ACTION::pass) {
+            passOutgoing(buffer, handle, p, ruleExeRslt.second);
+        }
+
+        return PACKET_ACTION::drop;
+    });
+
+
+
+void processIncoming() {
+    while (running) {
+        std::unique_lock<std::mutex> lock(incomingMutex);
+
+        // Wait until queue is not empty or we are stopping
+        incomingCV.wait(lock, [] {
+            return !incomingQueue.empty() || !running;
+        });
+
+        // Exit loop if stopping
+        if (!running && incomingQueue.empty())
+            break;
+
+        INTERMEDIATE_BUFFER buffer = incomingQueue.front().buffer;
+        HANDLE handle = incomingQueue.front().handle;
+        firewall_core::PacketInformation p = incomingQueue.front().packet;
+        u_short ruleID = incomingQueue.front().ruleID;
+
+		incomingQueue.pop();
+
+		lock.unlock(); // unlock before heavy processing
+
+		//handling edge cases
+		//if its destination is the device's dest
+		//if srcIP->dstIP are from the same network..
+		//is broadcast or multicast
+		//if its a loopback 127.0.0.x
+		if (p.destIP == deviceIP || isSameNetwork(p.srcIP, p.destIP, FIREWALL_MASK) || isBroadcast(p.destIP) ||
+			isMulticast(p.destIP) || isLoopback(p.srcIP) || isLoopback(p.destIP)) {
+			sendMstcp(buffer, handle);
+			continue;
+		}
+
+
+		//proccessing (allowed packets)
+		auto* ip_header = reinterpret_cast<iphdr_ptr>(buffer.m_IBuffer + sizeof(ether_header));
+
+		// Means the packet is coming from the internal network
+		if ((ntohl(ip_header->ip_src.S_un.S_addr) & FIREWALL_MASK) == NAT_NETWORK)
+		{
+			IP_ADDRESS internalIP;
+			PORT internalPort;
+			MAC_ADDRESS internalMAC;
+
+
+
+			//if there is NO nat entry for this packet (create one)
+			if (!NatTable.getInternalMapping(p.destIP, p.destPort, p.proto, internalIP, internalPort, internalMAC)) {
+
+				//circular packet srcIP -> srcIP (drop)
+				if (p.srcIP == p.destIP) {
+					logger.insertLog(buffer, ruleID);
+					continue;
+				}
+
+				//TODO: Port Network Translation
+				//PORT newPort = NatTable.generateUniquePort(firewallIP, p.proto);
+
+				//add NAT entry
+				NatTable.addEntry(p.srcIP, p.srcPort, p.srcMAC, firewallIP, p.srcPort, p.proto);
+
+				//apply NATing from internal -> external
+				NAT::modifyInternal(buffer, handle, firewallIP, p.srcPort, firewallMac, routerMac);
+			}
+
+			//apply NATing from internal -> external
+			else {
+				NAT::modifyInternal(buffer, handle, firewallIP, internalPort, firewallMac, routerMac);
+			}
+
+            //sending
+			sendAdapter(buffer, handle);
+		}
+		else // Packet is coming from external network, probably a response
+		{
+			// Take destination IP and Port, and check the NAT table
+			// If found, change the destination IP, Port, and MAC to the internal IP, Port, and MAC in the NAT entry.
+			IP_ADDRESS internalIP;
+			PORT internalPort;
+			MAC_ADDRESS internalMAC;
+
+			//from external -> internal find NAT entry (if exist)
+			if (NatTable.getInternalMapping(p.destIP, p.destPort, p.proto, internalIP, internalPort, internalMAC)) {
+				//if NAT entry exist apply NATing 
+				NAT::modifyExternal(buffer, handle, firewallMac, internalIP, internalPort, internalMAC);
+
+
+				//if its coming towards the device
+				//we send to mstcp not ADAPTER
+				if (internalIP == deviceIP) sendMstcp(buffer, handle);
+				//else we send to adapter
+				else sendAdapter(buffer, handle);
+				//change the flag to send (instead of receive)
+				//buffer.m_dwDeviceFlags = PACKET_FLAG_ON_SEND;
+
+			}
+			//else not NAT entry not found (external -> internal) (external tries to initialize) (drop)
+			//TODO: initialize contact from external -> internal
+
+		}
+
+		//log after nating
+		logger.insertLog(buffer, ruleID);
+	}
+}
+
+/*
+void processIncoming(INTERMEDIATE_BUFFER& buffer, HANDLE& handle) {
+    firewall_core::PacketInformation p(buffer);
+
+    //match rules and get answer
+    std::pair<PACKET_ACTION, u_short> ruleExeRslt = ruleExe.matchRules(p);
+
+    //log before nating
+    logger.insertLog(buffer, ruleExeRslt.second);
+    
+
+
+    //handling edge cases
+    //if its destination is the device's dest
+    if (p.destIP == deviceIP) return;
+    //if srcIP->dstIP are from the same network..
+    if (isSameNetwork(p.srcIP, p.destIP, FIREWALL_MASK)) return;
+    //is broadcast or multicast
+    if (isBroadcast(p.destIP) || isMulticast(p.destIP)) return;
+    //if its a loopback 127.0.0.x
+    if (isLoopback(p.srcIP) || isLoopback(p.destIP)) return;
+
+
+
+
+
+    //proccessing (allowed packets)
+    auto* ip_header = reinterpret_cast<iphdr_ptr>(buffer.m_IBuffer + sizeof(ether_header));
+
+    // Means the packet is coming from the internal network
+    if ((ntohl(ip_header->ip_src.S_un.S_addr) & FIREWALL_MASK) == NAT_NETWORK)
+    {
+        IP_ADDRESS internalIP;
+        PORT internalPort;
+        MAC_ADDRESS internalMAC;
+
+        
+
+        //if there is NO nat entry for this packet (create one)
+        if (!NatTable.getInternalMapping(p.destIP, p.destPort, p.proto, internalIP, internalPort, internalMAC)) {
+
+            //circular packet srcIP -> srcIP
+            if (p.srcIP == p.destIP) {
+                logger.insertLog(buffer, ruleExeRslt.second);
+                return PACKET_ACTION::drop;
+            }
+
+            //generate a unique port
+            PORT newPort = NatTable.generateUniquePort(firewallIP, p.proto);
+
+            //add NAT entry
+            NatTable.addEntry(p.srcIP, p.srcPort, p.srcMAC, firewallIP, p.srcPort , p.proto);
+
+            //apply NATing from internal -> external
+            NAT::modifyInternal(buffer, handle, firewallIP, p.srcPort, firewallMac, routerMac);
+        }
+
+        //apply NATing from internal -> external
+        else {
+            NAT::modifyInternal(buffer, handle, firewallIP, internalPort, firewallMac, routerMac);
+        }
+
+
+        
+        //sending
+        //change the flag to send (instead of receive)
+        //buffer.m_dwDeviceFlags = PACKET_FLAG_ON_SEND;
+
+        ETH_REQUEST newPacket = { handle, &buffer };
+        ndis_api->SendPacketToAdapter(&newPacket);
+      
+           
+    }
+    else // Packet is coming from external network, probably a response
+    {
+        // Take destination IP and Port, and check the NAT table
+        // If found, change the destination IP, Port, and MAC to the internal IP, Port, and MAC in the NAT entry.
+        IP_ADDRESS internalIP;
+        PORT internalPort;
+        MAC_ADDRESS internalMAC;
+
+        //from external -> internal find NAT entry (if exist)
+        if (NatTable.getInternalMapping(p.destIP, p.destPort, p.proto, internalIP, internalPort, internalMAC)) {
+            //if NAT entry exist apply NATing 
+            NAT::modifyExternal(buffer, handle, firewallMac, internalIP, internalPort, internalMAC);
+
+
+            //sending
+            ETH_REQUEST newPacket = { handle, &buffer };
+
+            //if its coming towards the device
+            //we send to mstcp not ADAPTER
+            if (internalIP == deviceIP) {
+                
+                logger.insertLog(buffer, ruleExeRslt.second);
+                //queue_packet_filter sends to mstcp
+                return PACKET_ACTION::pass;
+               
+            }//else we send to adapter
+            else {
+                ndis_api->SendPacketToAdapter(&newPacket);
+            }
+            //change the flag to send (instead of receive)
+            //buffer.m_dwDeviceFlags = PACKET_FLAG_ON_SEND;
+            
+            //sending to adapter
+            
+        }
+        
+    }
+
+    //log after nating
+    logger.insertLog(buffer, ruleExeRslt.second);
+
+    //if we send to adapter (we drop the packet) to not send to mstcp
+    return PACKET_ACTION::drop;
+}
+*/
+
+
+//outgoing packet processor src_ip = deviceIP (always)
+void processOutgoing() {
+    while (running) {
+        std::unique_lock<std::mutex> lock(outgoingMutex);
+
+        // Wait until queue is not empty or we are stopping
+        outgoingCV.wait(lock, [] {
+            return !outgoingQueue.empty() || !running;
+            });
+
+        // Exit loop if stopping
+        if (!running && outgoingQueue.empty())
+            break;
+
+        INTERMEDIATE_BUFFER buffer = outgoingQueue.front().buffer;
+        HANDLE handle = outgoingQueue.front().handle;
+        firewall_core::PacketInformation p = outgoingQueue.front().packet;
+        u_short ruleID = outgoingQueue.front().ruleID;
+
+        outgoingQueue.pop();
+
+        lock.unlock(); // unlock before heavy processing
+
+        //processing allowed packets
+		//add NAT entry
+		NatTable.addEntry(p.srcIP, p.srcPort, p.srcMAC, firewallIP, p.srcPort, p.proto);
+		NAT::modifyInternal(buffer, handle, firewallIP, p.srcPort, firewallMac, routerMac);
+
+
+		//log after NAT
+		logger.insertLog(buffer, ruleID);
+
+		sendAdapter(buffer, handle); 
+    }
+}
+
+/*
+//outgoing packet processor src_ip = deviceIP (always)
+void processOutgoing() {
+    firewall_core::PacketInformation p(buffer);
+
+    //match rules and get answer
+    std::pair<PACKET_ACTION, u_short> ruleExeRslt = ruleExe.matchRules(p);
+
+    //log before nating
+    logger.insertLog(buffer, ruleExeRslt.second);
+    //if the rule action is to drop (dont proceed further)
+    if (ruleExeRslt.first == PACKET_ACTION::drop) return PACKET_ACTION::drop;
+
+    //add NAT entry
+    NatTable.addEntry(p.srcIP, p.srcPort, p.srcMAC, firewallIP, p.srcPort, p.proto);
+    NAT::modifyInternal(buffer, handle, firewallIP, p.srcPort, firewallMac, routerMac);
+
+    //log after NAT
+    logger.insertLog(buffer, ruleExeRslt.second);
+
+    //let the queue_packet_filter send the packets..
+    return PACKET_ACTION::pass;
+}
+*/
+
+void passIncoming(INTERMEDIATE_BUFFER& buffer, HANDLE& handle, firewall_core::PacketInformation &p, u_short ruleID) {
+    if (!running) return;
+    {
+        std::lock_guard<std::mutex> lock(incomingMutex);
+        incomingQueue.push({ buffer, handle, p, ruleID });
+    }
+    incomingCV.notify_one();
+}
+
+void passOutgoing(INTERMEDIATE_BUFFER& buffer, HANDLE& handle, firewall_core::PacketInformation& p, u_short ruleID) {
+    if (!running) return;
+    {
+        std::lock_guard<std::mutex> lock(outgoingMutex);
+        outgoingQueue.push({ buffer, handle, p, ruleID });
+    }
+    outgoingCV.notify_one();
+}
+
+
+
+bool sendAdapter(INTERMEDIATE_BUFFER& buffer, HANDLE& handle) {
+    ETH_REQUEST newPacket = { handle, &buffer };
+    return ndis_api->SendPacketToAdapter(&newPacket);
+}
+
+bool sendMstcp(INTERMEDIATE_BUFFER& buffer, HANDLE& handle) {
+    ETH_REQUEST newPacket = { handle, &buffer };
+    return ndis_api->SendPacketToMstcp(&newPacket);
+}
 
 int main()
 {
-    cout << "NEW FILE STRUCTURE\n";
-    ruleExe.printExe();
-    cout << "done\n";
 
     //Firewall Main Component
+    NAT::NATTable NatTable;
+    firewall_core::LinearRuleExecuter ruleExe;
+    logging::Logger logger;
 
-    auto ndis_api = make_unique<ndisapi::queued_packet_filter>(
-        [](HANDLE, INTERMEDIATE_BUFFER& buffer) {
-            
-            pair<ndisapi::queued_packet_filter::packet_action, u_short> ans = ruleExe.matchRules(extractPacket(buffer));
-            
-            {
-                lock_guard<mutex> lock(in_mutex);
-                incoming_queue.push({ buffer, ans.second });
-            }
-            in_cv.notify_one();
 
-            return ans.first;
-        }, 
-        [](HANDLE, INTERMEDIATE_BUFFER& buffer) {
-            {
-                lock_guard<mutex> lock(out_mutex);
-                outgoing_queue.push(buffer);
-            }
-            out_cv.notify_one();
-            return ruleExe.matchRules(extractPacket(buffer)).first;
-        });
+    ruleExe.printExe();
+    //Firewall Main Component
+
+    //initialize sending threads
+    running = true;
+    sendIncomingThread = std::thread(processIncoming);
+    sendOutgoingThread = std::thread(processOutgoing);
+
 
     try
     {
-        // Open file to write info
-        if (!incoming_file.is_open() || !outgoing_file.is_open())
-        {
-            cerr << "Failed to open file for writing IP addresses." << endl;
-            return 1;
-        }
-
-        thread incoming_thread(incoming_packet_processor);
-        thread outgoing_thread(outgoing_packet_processor);
-
-
-
         if (ndis_api->IsDriverLoaded())
         {
-            cout << "WinpkFilter is loaded" << endl << endl;
+            std::cout << "WinpkFilter is loaded" << std::endl << std::endl;
         }
         else
         {
-            cout << "WinpkFilter is not loaded" << endl << endl;
+            std::cout << "WinpkFilter is not loaded" << std::endl << std::endl;
             return 1;
         }
 
 
-        cout << "Available network interfaces:" << endl << endl;
+        std::cout << "Available network interfaces:" << std::endl << std::endl;
         size_t index = 0;
         for (auto& e : ndis_api->get_interface_names_list())
         {
-            cout << ++index << ")\t" << e << endl;
+            std::cout << ++index << ")\t" << e << std::endl;
         }
 
-        cout << endl << "Select interface to filter:";
-        cin >> index;
+        std::cout << std::endl << "Select interface to filter:";
+        std::cin >> index;
 
         if (index > ndis_api->get_interface_names_list().size())
         {
-            cout << "Wrong parameter was selected. Out of range." << endl;
+            std::cout << "Wrong parameter was selected. Out of range." << std::endl;
             return 0;
         }
 
 
         ndis_api->start_filter(index - 1);
 
-        cout << "Press any key to stop filtering" << endl;
+        std::cout << "Press any key to stop filtering" << std::endl;
 
-        ignore = _getch();
+        std::ignore = _getch();
 
-        cout << "Exiting..." << endl;
+        std::cout << "Exiting..." << std::endl;
 
-        stop_threads = true;
-        in_cv.notify_all();
-        out_cv.notify_all();
-        incoming_thread.join();
-        outgoing_thread.join();
+        ndis_api->stop_filter();
+        std::cout << "filter stopped\n";
 
-        // Close the output file when done
-        incoming_file.close();
-        outgoing_file.close();
+        //stop threads
+        running = false;
+        incomingCV.notify_all();
+        sendIncomingThread.join();
+        std::cout << "sendIncomingThread joined\n";
 
-        cin.ignore(); cin.get();
+        outgoingCV.notify_all();
+        sendOutgoingThread.join();
+        std::cout << "sendOutgoingThread joined\n";
 
+        logger.stopLogger();
+        std::cout << "logger joined\n";
+
+        NatTable.stopCleanUpThread();
+        std::cout << "nat table joined\n";
+
+        std::cin.ignore(); std::cin.get();
     }
-    catch (const exception& ex)
+    catch (const std::exception& ex)
     {
-        cout << "Exception occurred: " << ex.what() << endl;
+        std::cout << "Exception occurred: " << ex.what() << std::endl;
     }
 
     return 0;
-}
-
-void WriteIntoFile(const firewall_core::PacketInformation& p, ofstream& file_stream, u_short ruleID) {
-    //Write Protocol
-    file_stream << "Protocol: ";
-    file_stream << (int)p.proto << endl;
-
-    //Write MAC addresses
-    file_stream << "Src MAC: ";
-    file_stream << p.srcMAC << endl;
-
-    file_stream << "Dest MAC: ";
-    file_stream << p.destMAC << endl;
-
-    file_stream << endl;
-    //End of write MAC
-
-
-    file_stream << "Src IP: " << p.srcIP << endl << "Dest IP: " << p.destIP << endl << endl; // Write IP to file
-    //End of write IP
-
-    //write ports;
-    file_stream << "Src Port: " << p.srcPort << endl << "Dest Port: " << p.destPort << endl;
-    file_stream << "rule id: " << ruleID << endl << endl;
-}
-
-void write_info_to_file(const string direction, const uint8_t* srcmac, const uint8_t* destmac, const in_addr& srcip, const in_addr& destip, ofstream& file_stream)
-{
-    //Write MAC addresses
-    file_stream << direction << endl << "Src MAC: ";
-
-    for (int i = 0; i < 6; ++i)
-    {
-        file_stream << hex << setw(2) << setfill('0') << static_cast<int>(srcmac[i]);
-        if (i < 5) file_stream << ":";
-    }
-
-    file_stream << endl << "Dest MAC: ";
-    for (int i = 0; i < 6; ++i)
-    {
-        file_stream << hex << setw(2) << setfill('0') << static_cast<int>(destmac[i]);
-        if (i < 5) file_stream << ":";
-    }
-    file_stream << endl;
-    //End of write MAC
-
-
-    //Write IP addresses
-    char srcip_str[INET_ADDRSTRLEN]; // Buffer to hold the IP string
-    char destip_str[INET_ADDRSTRLEN];
-    InetNtopA(AF_INET, &srcip, srcip_str, INET_ADDRSTRLEN); // Converts the IP to a string (ANSI version)
-    InetNtopA(AF_INET, &destip, destip_str, INET_ADDRSTRLEN);
-
-    file_stream << "Src IP: " << srcip_str << endl << "Dest IP: " << destip_str << endl << endl; // Write IP to file
-    //End of write IP
-}
-
-
-
-
-void write_buffer_hex(const uint8_t* buffer, size_t length, ofstream& file_stream)
-{
-    for (size_t i = 0; i < length; ++i)
-    {
-        if (i % 32 == 0) file_stream << endl; // New line every 16 bytes
-        file_stream << hex << setw(2) << setfill('0')
-            << static_cast<int>(buffer[i]) << " ";
-    }
-    file_stream << dec << endl << endl << endl; // Reset to decimal output
-}
-
-
-ndisapi::queued_packet_filter::packet_action filter(INTERMEDIATE_BUFFER buffer, ether_header_ptr eth_header)
-{
-
-    if (eth_header->h_proto == ntohs(ETH_P_IP))
-    {
-        auto* ip_header = reinterpret_cast<iphdr_ptr>(buffer.m_IBuffer + sizeof(ether_header));
-
-        if (static_cast<int>(ip_header->ip_p) == IPPROTO_ICMP)
-            return actions[0];
-        else
-            return actions[1];
-    }
-    else if (eth_header->h_proto == ntohs(ETH_P_ARP))
-        return actions[0];
-
-    return actions[0];
-
 }
